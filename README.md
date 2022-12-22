@@ -10,3 +10,7 @@ the key processing within your APP context (HSM, Smartcard, KDF, ...)
 
 This is an 100% pure go, stdlib only, no external dependencies,
 please look at api.go for more details.
+
+# CONTRIBUTION
+
+Yes, Please! PRs Welcome! 
