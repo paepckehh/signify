@@ -46,7 +46,7 @@ func dec(b64 string) ([]byte, error) {
 // sliceTo64
 func sliceTo64(in []byte) (r [64]byte, err error) {
 	if len(in) != 64 {
-		errors.New("internal: sliceTo64 failed, input lengh")
+		return r, errors.New("internal: sliceTo64 failed, input lengh")
 	}
 	// for i := 0; i < 64; i++ {
 	//	r[i] = in[i]
@@ -58,7 +58,7 @@ func sliceTo64(in []byte) (r [64]byte, err error) {
 // sliceTo32
 func sliceTo32(in []byte) (r [32]byte, err error) {
 	if len(in) != 32 {
-		errors.New("internal: sliceTo32 failed, input lengh")
+		return r, errors.New("internal: sliceTo32 failed, input lengh")
 	}
 	// for i := 0; i < 32; i++ {
 	//	r[i] = in[i]
@@ -70,7 +70,7 @@ func sliceTo32(in []byte) (r [32]byte, err error) {
 // sliceTo8
 func sliceTo8(in []byte) (r [8]byte, err error) {
 	if len(in) != 8 {
-		errors.New("internal: sliceTo8 failed, input lengh")
+		return r, errors.New("internal: sliceTo8 failed, input lengh")
 	}
 	// for i := 0; i < 8; i++ {
 	//	r[i] = in[i]
@@ -82,7 +82,7 @@ func sliceTo8(in []byte) (r [8]byte, err error) {
 // sliceTo82
 func sliceTo2(in []byte) (r [2]byte, err error) {
 	if len(in) != 2 {
-		errors.New("internal: sliceTo2 failed, input lengh")
+		return r, errors.New("internal: sliceTo2 failed, input lengh")
 	}
 	// for i := 0; i < 2; i++ {
 	// 	r[i] = in[i]
