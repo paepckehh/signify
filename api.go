@@ -101,11 +101,17 @@ func (pub PublicKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
 }
 
 // Encode PublicKey
-func (pub *PublicKey) Encode() (err error) {
+func (pub *PublicKey) Encode() error {
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, pub.Raw)
+	err := binary.Write(&buf, binary.BigEndian, pub.Raw)
+	if err != nil {
+		return err
+	}
 	pub.Base64, err = enc(buf.Bytes())
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Decode PublicKey
@@ -180,7 +186,7 @@ func (pk PrivateKey) GetPublicKey() PublicKey {
 
 // GetPubKeyFile from PrivateKey encodes and assembles an OpenBSD Signify compatible publickey file
 func (pk PrivateKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
-	if pk.Raw.RawKey[:] == nil {
+	if len(pk.Raw.RawKey[:]) != PrivateKeySize {
 		return nil, errors.New("gen publickey file: no private key")
 	}
 	return pk.GetPublicKey().GetPubKeyFile(addUntrusted)
@@ -286,11 +292,17 @@ func (msg *Message) Decode() (err error) {
 //
 
 // Encode Raw Signature to Base64
-func (sig *Signature) Encode() (err error) {
+func (sig *Signature) Encode() error {
 	var buf bytes.Buffer
-	binary.Write(&buf, binary.BigEndian, sig.Raw)
+	err := binary.Write(&buf, binary.BigEndian, sig.Raw)
+	if err != nil {
+		return err
+	}
 	sig.Base64, err = enc(buf.Bytes())
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Decode Base64 Signature to Raw
