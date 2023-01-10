@@ -1,6 +1,6 @@
 # OVERVIEW
 
-[paepche.de/signify](https://paepcke.de/signify)
+[paepche.de/signify](https://paepcke.de/signify/)
 
 This implementation does intentionally NOT satisfy the OpenBSD signify
 private key bcrypt/pbkdf handling interface.
