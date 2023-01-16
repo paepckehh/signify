@@ -1,5 +1,5 @@
 # OVERVIEW
-[![Go Report Card](https://goreportcard.com/badge/paepcke.de/signify)](https://goreportcard.com/report/paepcke.de/signify)
+[![Go Reference](https://pkg.go.dev/badge/paepcke.de/signify.svg)](https://pkg.go.dev/paepcke.de/signify) [![Go Report Card](https://goreportcard.com/badge/paepcke.de/signify)](https://goreportcard.com/report/paepcke.de/signify)
 
 [paepche.de/signify](https://paepcke.de/signify/)
 
