@@ -1,5 +1,5 @@
 # OVERVIEW
-[![Go Reference](https://pkg.go.dev/badge/paepcke.de/signify.svg)](https://pkg.go.dev/paepcke.de/signify) [![Go Report Card](https://goreportcard.com/badge/paepcke.de/signify)](https://goreportcard.com/report/paepcke.de/signify)
+[![Go Reference](https://pkg.go.dev/badge/paepcke.de/signify.svg)](https://pkg.go.dev/paepcke.de/signify) [![Go Report Card](https://goreportcard.com/badge/paepcke.de/signify)](https://goreportcard.com/report/paepcke.de/signify) [![Go Build](https://github.com/paepckehh/signify/actions/workflows/golang.yml/badge.svg)](https://github.com/paepckehh/signify/actions/workflows/golang.yml)
 
 [paepche.de/signify](https://paepcke.de/signify/)
 
