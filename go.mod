@@ -1,3 +1,3 @@
 module paepcke.de/signify
 
-go 1.19
+go 1.21
