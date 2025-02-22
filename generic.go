@@ -17,9 +17,10 @@ const (
 )
 
 var (
-	_algoEd25519      = [2]byte{'E', 'd'}
-	_pkUnlockBcrypt   = [2]byte{'B', 'k'}
-	_pkUnlockExternal = [2]byte{'E', 'x'}
+	_algoEd25519 = [2]byte{'E', 'd'}
+
+// _pkUnlockBcrypt   = [2]byte{'B', 'k'}
+// _pkUnlockExternal = [2]byte{'E', 'x'}
 )
 
 //
