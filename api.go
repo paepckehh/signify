@@ -82,13 +82,19 @@ func NewPublicKey() PublicKey {
 
 // GetPubKeyFile from PublicKey encodes and assembles an OpenBSD Signify compatible publickey file
 func (pub PublicKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
-	if pub.Base64 == _empty {
-		if pub.Raw.RawKey == ([PublicKeySize]byte{}) {
+	if pub.Raw.RawKey == ([PublicKeySize]byte{}) {
+		if pub.Base64 == _empty {
 			return nil, errors.New("gen publickey file: no public key")
 		}
-		if err := pub.Encode(); err != nil {
-			return nil, errors.New("internal error: gen publickey file: encode public key: " + err.Error())
+		if err := pub.Decode(); err != nil {
+			return nil, errors.New("gen publickey file: decode public key: " + err.Error())
 		}
+	}
+	if pub.Raw.PKAlgo != _algoEd25519 {
+		return nil, errors.New("gen publickey file: unknown public key algo")
+	}
+	if err := pub.Encode(); err != nil {
+		return nil, errors.New("internal error: gen publickey file: encode public key: " + err.Error())
 	}
 	var s strings.Builder
 	s.WriteString(_untrustedComment)
@@ -183,6 +189,9 @@ func (pk PrivateKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
 	if pk.Raw.RawKey == (RawPrivateKey{}.RawKey) {
 		return nil, errors.New("gen publickey file: no private key")
 	}
+	if pk.Raw.PKAlgo != _algoEd25519 {
+		return nil, errors.New("gen publickey file: unknown private key algo")
+	}
 	return pk.GetPublicKey().GetPubKeyFile(addUntrusted)
 }
 
@@ -274,7 +283,11 @@ func (msg *Message) GetSigFile(pk PrivateKey) ([]byte, error) {
 	if err := msg.Sign(pk); err != nil {
 		return nil, errors.New("generate sig file: " + err.Error())
 	}
-	return []byte(_untrustedComment + msg.UntrustedComment + _linefeed + msg.Signature.Base64 + _linefeed), nil
+	comment := msg.UntrustedComment
+	if !strings.HasPrefix(comment, _space) {
+		comment = _space + comment
+	}
+	return []byte(_untrustedComment + comment + _linefeed + msg.Signature.Base64 + _linefeed), nil
 }
 
 // Encode Raw Message to Base64

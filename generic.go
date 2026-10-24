@@ -29,7 +29,7 @@ var (
 
 // enc ...
 func enc(raw []byte) (string, error) {
-	if raw == nil {
+	if len(raw) == 0 {
 		return _empty, errors.New("base64 encode: no raw message")
 	}
 	return base64.StdEncoding.EncodeToString(raw), nil

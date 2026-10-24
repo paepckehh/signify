@@ -8,7 +8,7 @@ Guidance for AI agents working in this repository.
 
 **Design invariant:** OpenBSD signify's private-key bcrypt/pbkdf passphrase handling is intentionally NOT implemented. Secret handling (HSM, smartcard, KDF, ...) belongs to the calling application. Do not "complete" this — it is the point of the fork, not a gap.
 
-**Dependency invariant:** the README promises "100% pure go, stdlib only, no external dependencies". Never add a third-party dependency to `go.mod`.
+**Dependency invariant:** the README promises "100% pure Go, stdlib only — no external modules, no `go.sum`, no CGO". Never add a third-party dependency to `go.mod`.
 
 Lineage: minimal fork of `github.com/ebfe/signify`. The original 2022 fork code is archived in `.attic/signifyseed.go.20221021` (reference only, not compiled).
 
@@ -18,7 +18,8 @@ Flat, single package at the repo root — no `cmd/`, no `internal/`, no subpacka
 
 - `api.go` — the entire public API: size constants, `Signature`, `PublicKey`, `PrivateKey`, `Message` types and their methods (`Sign`, `Verify`, `Encode`, `Decode`, `GetPubKeyFile`, `GetSigFile`, `GeneratePKFromSeed`, `GetPublicKey`).
 - `generic.go` — unexported helpers: base64 `enc`/`dec`, wire `encodeRaw`/`decodeRaw`, the `_algoEd25519` tag, and string constants for file framing.
-- `signify_test.go` — stdlib-only tests: deterministic key generation, sign/verify round trips, base64 key loading, file framing, invalid input.
+- `signify_test.go` — stdlib-only tests: deterministic key generation, constructor defaults, sign/verify round trips, base64 wire forms, a pinned wire-format vector, file framing, malformed input.
+- `docs/` — dependency-free, theme-aware hero SVGs (`hero-light.svg`, `hero-dark.svg`) used by the README `<picture>` block.
 - `.attic/` — archived historical code, not part of the build.
 - `.github/workflows/` — `golang.yml` (build/vet/test), `codeql.yml` (CodeQL).
 
@@ -34,6 +35,8 @@ gofmt -w -s .   # format
 make check      # gofmt -w -s . && go vet ./...
 make deps       # DESTRUCTIVE: deletes go.mod and re-runs go mod init/tidy — never run casually
 ```
+
+The module declares `go 1.27.2`; CI (`golang.yml`) tests `1.27.x` on linux, macOS, and Windows with `CGO_ENABLED=0`.
 
 Command gotchas:
 
@@ -52,7 +55,8 @@ Key flows:
 - `pk.GetPublicKey()`: public key is the last `PublicKeySize` bytes of the private key (`PrivatePublicKeyOffset`), sharing the private key's fingerprint.
 - `msg.Sign(pk)`: lazy-decode key → derive public key → reset signature → `ed25519.Sign` → set fingerprint/algo → self-verify → `Signature.Encode()`. Every sign is followed by a verify.
 - `msg.Verify(pub)`: lazy-decode public key, message and signature → signature fingerprint must match the **supplied** public key's fingerprint → `ed25519.Verify`.
-- `GetPubKeyFile` / `GetSigFile` assemble OpenBSD-signify-compatible files: an `untrusted comment:` line followed by the base64 line, each `\n`-terminated.
+- `GetPubKeyFile` / `GetSigFile` assemble OpenBSD-signify-compatible files: an `untrusted comment:` line followed by the base64 line, each `\n`-terminated. `GetSigFile` guarantees the `untrusted comment: ` prefix by inserting a space when the caller comment does not already start with one. `PublicKey.GetPubKeyFile` validates a base64-only key, always re-encodes `Raw` into the file, and both public key file paths reject a non-`Ed` algorithm tag.
+- `enc` rejects zero-length input, so `Message.Encode` cannot emit an empty string that `Message.Decode` would then refuse.
 
 ## Conventions
 
@@ -65,7 +69,7 @@ Key flows:
 
 ## Testing
 
-`signify_test.go` contains stdlib-only tests (no framework, no fixtures) covering deterministic key generation, sign/verify round trips, base64 key loading, file framing, re-signing, and rejection of empty/invalid inputs. Keep new tests in the same package and dependency-free.
+`signify_test.go` contains stdlib-only tests (no framework, no fixtures) covering deterministic key generation, constructor defaults, sign/verify round trips, base64 wire forms, a pinned wire-format vector, file framing and comment normalization, re-signing, malformed input, and rejection of empty/invalid inputs. Keep new tests in the same package and dependency-free. Run `go test -cover ./...` to check coverage (currently above 92%).
 
 ## Release process
 
