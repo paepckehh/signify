@@ -19,7 +19,7 @@ Flat, single package at the repo root — no `cmd/`, no `internal/`, no subpacka
 - `api.go` — the entire public API: size constants, `Signature`, `PublicKey`, `PrivateKey`, `Message` types and their methods (`Sign`, `Verify`, `Encode`, `Decode`, `GetPubKeyFile`, `GetSigFile`, `GeneratePKFromSeed`, `GetPublicKey`).
 - `generic.go` — unexported helpers: base64 `enc`/`dec`, wire `encodeRaw`/`decodeRaw`, the `_algoEd25519` tag, and string constants for file framing.
 - `signify_test.go` — stdlib-only tests: deterministic key generation, constructor defaults, sign/verify round trips, base64 wire forms, a pinned wire-format vector, file framing, malformed input.
-- `docs/` — dependency-free, theme-aware hero SVGs (`hero-light.svg`, `hero-dark.svg`) and established banners (`established-light.svg`, `established-dark.svg`) used by the README `<picture>` blocks.
+- `docs/` — dependency-free, theme-aware hero SVGs (`hero-light.svg`, `hero-dark.svg`), established banners (`established-light.svg`, `established-dark.svg`), terminal screenshots (`screenshot-demo.svg`, `screenshot-tests.svg`), and the stdlib-only renderer that generates them from real captured ANSI output (`render_ansi_svg.py`). README uses the hero and banners via `<picture>` blocks and the screenshots as plain images.
 - `.attic/` — archived historical code, not part of the build.
 - `.github/workflows/` — `golang.yml` (build/vet/test), `codeql.yml` (CodeQL).
 

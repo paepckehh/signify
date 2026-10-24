@@ -132,6 +132,14 @@ The key ID is literally `demo-key` here because it was copied from the seed
 token into the fingerprint field. In production, use a random or KMS-managed
 fingerprint.
 
+### 📸 Real output
+
+<p align="center">
+  <img src="docs/screenshot-demo.svg" alt="signify quickstart: deterministic public key, Ed25519 signature, and successful verification" width="100%">
+</p>
+
+<p align="center"><sub><b>Quickstart, real terminal output</b> - seed in, key out, signature self-verified.</sub></p>
+
 ### Verify data you already have
 
 `Verify` lazily decodes the message, the signature, and the public key from
@@ -308,6 +316,12 @@ deterministic key generation, constructor defaults, sign/verify round trips,
 base64 wire forms, a pinned wire-format vector, file framing and comment
 handling, re-signing, malformed input, tamper rejection, and invalid sizes.
 
+<p align="center">
+  <img src="docs/screenshot-tests.svg" alt="signify full test suite: 24 tests passing" width="100%">
+</p>
+
+<p align="center"><sub><b>Full suite, real terminal output</b> - 24 tests across signing, verification, and every wire form.</sub></p>
+
 `make deps` is destructive: it deletes `go.mod` and re-initializes the module.
 Do not run it casually.
 
@@ -321,6 +335,9 @@ Do not run it casually.
 - Established banner: [dark](docs/established-dark.svg) /
   [light](docs/established-light.svg) — 2022 to today, 31+ tagged releases
   (theme-aware `<picture>`)
+- Screenshots: [quickstart](docs/screenshot-demo.svg) /
+  [test suite](docs/screenshot-tests.svg) — rendered from real captured ANSI
+  output with [docs/render_ansi_svg.py](docs/render_ansi_svg.py)
 - History: a minimal fork of [`github.com/ebfe/signify`](https://github.com/ebfe/signify)
 
 ## 🤝 Contributing
