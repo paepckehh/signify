@@ -2,9 +2,7 @@
 package signify
 
 import (
-	"bytes"
 	"crypto/ed25519"
-	"encoding/binary"
 	"errors"
 	"strings"
 )
@@ -85,8 +83,11 @@ func NewPublicKey() PublicKey {
 // GetPubKeyFile from PublicKey encodes and assembles an OpenBSD Signify compatible publickey file
 func (pub PublicKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
 	if pub.Base64 == _empty {
+		if pub.Raw.RawKey == ([PublicKeySize]byte{}) {
+			return nil, errors.New("gen publickey file: no public key")
+		}
 		if err := pub.Encode(); err != nil {
-			return nil, errors.New("internal error: gen publickey file: decode public key: " + err.Error())
+			return nil, errors.New("internal error: gen publickey file: encode public key: " + err.Error())
 		}
 	}
 	var s strings.Builder
@@ -102,37 +103,14 @@ func (pub PublicKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
 
 // Encode PublicKey
 func (pub *PublicKey) Encode() error {
-	var buf bytes.Buffer
-	err := binary.Write(&buf, binary.BigEndian, pub.Raw)
-	if err != nil {
-		return err
-	}
-	pub.Base64, err = enc(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	return nil
+	var err error
+	pub.Base64, err = encodeRaw(pub.Raw)
+	return err
 }
 
 // Decode PublicKey
-func (pub *PublicKey) Decode() (err error) {
-	s, err := dec(pub.Base64)
-	if err != nil {
-		return err
-	}
-	if len(s) != KeyAlgoSize+FingerPrintSize+PublicKeySize {
-		return errors.New("invalid base64 pulic key size")
-	}
-	pub.Raw.PKAlgo, err = sliceTo2(s[:KeyAlgoSize])
-	if err != nil {
-		return err
-	}
-	pub.Raw.Fingerprint, err = sliceTo8(s[KeyAlgoSize : KeyAlgoSize+FingerPrintSize])
-	if err != nil {
-		return err
-	}
-	pub.Raw.RawKey, err = sliceTo32(s[KeyAlgoSize+FingerPrintSize:])
-	return err
+func (pub *PublicKey) Decode() error {
+	return decodeRaw(pub.Base64, KeyAlgoSize+FingerPrintSize+PublicKeySize, "public key", &pub.Raw)
 }
 
 //
@@ -157,18 +135,31 @@ func NewPrivateKey() PrivateKey {
 	return PrivateKey{Raw: RawPrivateKey{PKAlgo: _algoEd25519}}
 }
 
+// Encode PrivateKey
+func (pk *PrivateKey) Encode() error {
+	var err error
+	pk.Base64, err = encodeRaw(pk.Raw)
+	return err
+}
+
+// Decode PrivateKey
+func (pk *PrivateKey) Decode() error {
+	return decodeRaw(pk.Base64, KeyAlgoSize+FingerPrintSize+PrivateKeySize, "private key", &pk.Raw)
+}
+
+// decodeIfNeeded fills Raw from Base64 when only the wire form is present
+func (pk *PrivateKey) decodeIfNeeded() error {
+	if pk.Raw != (RawPrivateKey{}) || pk.Base64 == _empty {
+		return nil
+	}
+	return pk.Decode()
+}
+
 // GeneratePKFromSeed generates a new deterministic, reproduceable PrivateKey from seed
 func GeneratePKFromSeed(seedToken [SeedTokenSize]byte) PrivateKey {
-	var err error
 	pk := NewPrivateKey()
-	pk.Raw.Fingerprint, err = sliceTo8(seedToken[ed25519.SeedSize:])
-	if err != nil {
-		panic("internal: generate keypair: " + err.Error()) // do not recover!
-	}
-	pk.Raw.RawKey, err = sliceTo64(ed25519.NewKeyFromSeed(seedToken[:SeedSize]))
-	if err != nil {
-		panic("internal: generate keypair: " + err.Error()) // do not recover!
-	}
+	copy(pk.Raw.Fingerprint[:], seedToken[SeedSize:])
+	copy(pk.Raw.RawKey[:], ed25519.NewKeyFromSeed(seedToken[:SeedSize]))
 	msg := Message{Raw: []byte(_verifyThisKeyGenMessage)}
 	if err := msg.Sign(pk); err != nil {
 		panic("internal: generate keypair: " + err.Error()) // do not recover!
@@ -186,7 +177,10 @@ func (pk PrivateKey) GetPublicKey() PublicKey {
 
 // GetPubKeyFile from PrivateKey encodes and assembles an OpenBSD Signify compatible publickey file
 func (pk PrivateKey) GetPubKeyFile(addUntrusted string) ([]byte, error) {
-	if len(pk.Raw.RawKey[:]) != PrivateKeySize {
+	if err := pk.decodeIfNeeded(); err != nil {
+		return nil, errors.New("gen publickey file: no private key and " + err.Error())
+	}
+	if pk.Raw.RawKey == (RawPrivateKey{}.RawKey) {
 		return nil, errors.New("gen publickey file: no private key")
 	}
 	return pk.GetPublicKey().GetPubKeyFile(addUntrusted)
@@ -211,28 +205,28 @@ func NewMessage() *Message {
 }
 
 // Sign a message decodes, when nessesary, the Message and generates an encoded signature
-func (msg *Message) Sign(pk PrivateKey) (err error) {
-	switch {
-	case pk.Raw.RawKey[:] == nil:
+func (msg *Message) Sign(pk PrivateKey) error {
+	if err := pk.decodeIfNeeded(); err != nil {
+		return errors.New("sign failed: no private key and " + err.Error())
+	}
+	if pk.Raw.RawKey == (RawPrivateKey{}.RawKey) {
 		return errors.New("sign failed: no private key found")
-	case msg.Raw == nil:
+	}
+	if msg.Raw == nil {
 		if err := msg.Decode(); err != nil {
 			return errors.New("sign failed: no raw message and " + err.Error())
 		}
 	}
 	msg.PublicKey = pk.GetPublicKey()
+	msg.Signature = NewSignature()
 	msg.Signature.Raw.Fingerprint = pk.Raw.Fingerprint
 	switch {
 	case pk.Raw.PKAlgo == _algoEd25519:
-		msg.Signature.Raw.PKAlgo = _algoEd25519
-		key := ed25519.Sign(ed25519.PrivateKey(pk.Raw.RawKey[:]), msg.Raw)
-		if msg.Signature.Raw.RawSig, err = sliceTo64(key); err != nil {
-			return err
-		}
+		copy(msg.Signature.Raw.RawSig[:], ed25519.Sign(ed25519.PrivateKey(pk.Raw.RawKey[:]), msg.Raw))
 	default:
-		return errors.New("unknown signature Algo")
+		return errors.New("sign failed: unknown signature algo")
 	}
-	if ok, err := msg.Verify(pk.GetPublicKey()); !ok {
+	if _, err := msg.Verify(msg.PublicKey); err != nil {
 		return errors.New("sign failed: verify after sign: " + err.Error())
 	}
 	if err := msg.Signature.Encode(); err != nil {
@@ -241,28 +235,36 @@ func (msg *Message) Sign(pk PrivateKey) (err error) {
 	return nil
 }
 
-// Verify a message decodes, when nessesary, the Message and the PublicKey and verifies the signature
+// Verify a message decodes, when nessesary, the Message, the Signature and the PublicKey and verifies the signature
 func (msg *Message) Verify(pub PublicKey) (bool, error) {
-	switch {
-	case pub.Raw.RawKey[:] == nil:
+	if pub.Base64 != _empty && pub.Raw.RawKey == ([PublicKeySize]byte{}) {
 		if err := pub.Decode(); err != nil {
-			return false, errors.New("verify failed: no public key found")
+			return false, errors.New("verify failed: " + err.Error())
 		}
-	case msg.Raw == nil:
+	}
+	if pub.Raw.RawKey == ([PublicKeySize]byte{}) {
+		return false, errors.New("verify failed: no public key found")
+	}
+	if msg.Raw == nil {
 		if err := msg.Decode(); err != nil {
 			return false, errors.New("verify failed: no raw message and " + err.Error())
 		}
 	}
-	if msg.Signature.Raw.Fingerprint != msg.PublicKey.Raw.Fingerprint {
-		return false, errors.New("fingerprint matching failed: wrong public key for message")
+	if msg.Signature.Base64 != _empty {
+		if err := msg.Signature.Decode(); err != nil {
+			return false, errors.New("verify failed: " + err.Error())
+		}
+	}
+	if msg.Signature.Raw.Fingerprint != pub.Raw.Fingerprint {
+		return false, errors.New("verify failed: fingerprint mismatch: wrong public key for message")
 	}
 	switch {
 	case msg.Signature.Raw.PKAlgo == _algoEd25519 && pub.Raw.PKAlgo == _algoEd25519:
 		if !ed25519.Verify(pub.Raw.RawKey[:], msg.Raw, msg.Signature.Raw.RawSig[:]) {
-			return false, errors.New("ed25519 signature verification failed")
+			return false, errors.New("verify failed: ed25519 signature verification failed")
 		}
 	default:
-		return false, errors.New("unknown signature Algo")
+		return false, errors.New("verify failed: unknown signature algo")
 	}
 	return true, nil
 }
@@ -276,13 +278,15 @@ func (msg *Message) GetSigFile(pk PrivateKey) ([]byte, error) {
 }
 
 // Encode Raw Message to Base64
-func (msg *Message) Encode() (err error) {
-	msg.Base64, err = enc(msg.Raw[:])
+func (msg *Message) Encode() error {
+	var err error
+	msg.Base64, err = enc(msg.Raw)
 	return err
 }
 
 // Decode Base64 Message to Raw Message
-func (msg *Message) Decode() (err error) {
+func (msg *Message) Decode() error {
+	var err error
 	msg.Raw, err = dec(msg.Base64)
 	return err
 }
@@ -293,35 +297,12 @@ func (msg *Message) Decode() (err error) {
 
 // Encode Raw Signature to Base64
 func (sig *Signature) Encode() error {
-	var buf bytes.Buffer
-	err := binary.Write(&buf, binary.BigEndian, sig.Raw)
-	if err != nil {
-		return err
-	}
-	sig.Base64, err = enc(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	return nil
+	var err error
+	sig.Base64, err = encodeRaw(sig.Raw)
+	return err
 }
 
 // Decode Base64 Signature to Raw
-func (sig *Signature) Decode() (err error) {
-	s, err := dec(sig.Base64)
-	if err != nil {
-		return err
-	}
-	if len(s) != KeyAlgoSize+FingerPrintSize+SignatureSize {
-		return errors.New("invalid base64 signature size")
-	}
-	sig.Raw.PKAlgo, err = sliceTo2(s[:KeyAlgoSize])
-	if err != nil {
-		return err
-	}
-	sig.Raw.Fingerprint, err = sliceTo8(s[KeyAlgoSize : KeyAlgoSize+FingerPrintSize])
-	if err != nil {
-		return err
-	}
-	sig.Raw.RawSig, err = sliceTo64(s[KeyAlgoSize+FingerPrintSize:])
-	return err
+func (sig *Signature) Decode() error {
+	return decodeRaw(sig.Base64, KeyAlgoSize+FingerPrintSize+SignatureSize, "signature", &sig.Raw)
 }

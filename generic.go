@@ -1,17 +1,17 @@
 package signify
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 )
 
 const (
 	_pubUT                   = " signify public key"
-	_pkUT                    = " signify private key"
 	_empty                   = ""
 	_space                   = " "
 	_linefeed                = "\n"
-	_variableSize            = 0
 	_untrustedComment        = "untrusted comment:"
 	_verifyThisKeyGenMessage = "Nachts sind alle blauen Katzen grau!"
 )
@@ -32,8 +32,7 @@ func enc(raw []byte) (string, error) {
 	if raw == nil {
 		return _empty, errors.New("base64 encode: no raw message")
 	}
-	s := base64.StdEncoding.EncodeToString(raw)
-	return s, nil
+	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
 // dec ...
@@ -44,50 +43,23 @@ func dec(b64 string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(b64)
 }
 
-// sliceTo64
-func sliceTo64(in []byte) (r [64]byte, err error) {
-	if len(in) != 64 {
-		return r, errors.New("internal: sliceTo64 failed, input lengh")
+// encodeRaw encodes a raw key or signature struct as base64
+func encodeRaw(raw any) (string, error) {
+	var buf bytes.Buffer
+	if err := binary.Write(&buf, binary.BigEndian, raw); err != nil {
+		return _empty, err
 	}
-	// for i := 0; i < 64; i++ {
-	//	r[i] = in[i]
-	// }
-	copy(r[:], in[:])
-	return r, nil
+	return enc(buf.Bytes())
 }
 
-// sliceTo32
-func sliceTo32(in []byte) (r [32]byte, err error) {
-	if len(in) != 32 {
-		return r, errors.New("internal: sliceTo32 failed, input lengh")
+// decodeRaw decodes base64 into a raw key or signature struct, checking its wire size
+func decodeRaw(b64 string, size int, kind string, raw any) error {
+	s, err := dec(b64)
+	if err != nil {
+		return err
 	}
-	// for i := 0; i < 32; i++ {
-	//	r[i] = in[i]
-	// }
-	copy(r[:], in[:])
-	return r, nil
-}
-
-// sliceTo8
-func sliceTo8(in []byte) (r [8]byte, err error) {
-	if len(in) != 8 {
-		return r, errors.New("internal: sliceTo8 failed, input lengh")
+	if len(s) != size {
+		return errors.New("decode " + kind + " failed: invalid base64 size")
 	}
-	// for i := 0; i < 8; i++ {
-	//	r[i] = in[i]
-	// }
-	copy(r[:], in[:])
-	return r, nil
-}
-
-// sliceTo82
-func sliceTo2(in []byte) (r [2]byte, err error) {
-	if len(in) != 2 {
-		return r, errors.New("internal: sliceTo2 failed, input lengh")
-	}
-	// for i := 0; i < 2; i++ {
-	// 	r[i] = in[i]
-	// }
-	copy(r[:], in[:])
-	return r, nil
+	return binary.Read(bytes.NewReader(s), binary.BigEndian, raw)
 }
