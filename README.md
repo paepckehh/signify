@@ -29,7 +29,7 @@ go get paepcke.de/signify
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/established-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="docs/established-light.svg">
-  <img src="docs/established-light.svg" alt="signify: established in 2022, 4+ years of continuous development on GitHub, 31+ tagged releases" width="100%">
+  <img src="docs/established-light.svg" alt="signify: established in 2022, continuously maintained since then, 34+ tagged releases across five years" width="100%">
 </picture>
 
 </div>
@@ -293,6 +293,93 @@ Report vulnerabilities to `alert.git (/AT/) paepcke.de` — see
 The last point is the reason this fork exists. If you need the standard
 passphrase-protected private key format, use OpenBSD `signify` directly.
 
+## ⚛️ Post-quantum & SPHINCS+
+
+`signify` is deliberately classical: Ed25519 today. The migration question is
+still real. NIST now has a final stateless hash-based signature standard, and
+EdDSA is on the retirement path for long-lived systems.
+
+### SLH-DSA is standardized SPHINCS+
+
+**FIPS 205, Stateless Hash-Based Digital Signature Standard (SLH-DSA)**, was
+published on **13 August 2024**, together with ML-KEM (FIPS 203) and ML-DSA
+(FIPS 204). SLH-DSA is the standardized form of **SPHINCS+**. It is *stateless*
+(no one-time-key bookkeeping, unlike LMS/XMSS) and rests only on hash-function
+assumptions, making it the conservative hedge against a future lattice break.
+
+The price is signature size and CPU time:
+
+| Parameter set (SHA-2 or SHAKE) | Category | Public key | Private key | Signature |
+| :--- | ---: | ---: | ---: | ---: |
+| SLH-DSA-128s | 1 | 32 B | 64 B | 7,856 B |
+| SLH-DSA-128f | 1 | 32 B | 64 B | 17,088 B |
+| SLH-DSA-192s | 3 | 48 B | 96 B | 16,224 B |
+| SLH-DSA-192f | 3 | 48 B | 96 B | 35,664 B |
+| SLH-DSA-256s | 5 | 64 B | 128 B | 29,792 B |
+| SLH-DSA-256f | 5 | 64 B | 128 B | 49,856 B |
+
+`128s`/`192s`/`256s` favor small signatures; `f` variants favor signing speed.
+For scale: a signify signature blob is 74 bytes, so a PQ mode would be a new
+container, not a new tag on the existing format. FIPS 205 has had no errata or
+revision as of October 2026; draft SP 800-230 is the only active SLH-DSA
+extension, proposing six `-24` sets at 3,856 / 7,752 / 14,944 bytes for levels
+1/3/5.
+
+### 2024–2026 decisions that matter
+
+| Date | Document or decision | Why it matters |
+| :--- | :--- | :--- |
+| 2024-08-13 | [FIPS 205](https://csrc.nist.gov/pubs/fips/205/final) final | SPHINCS+ becomes SLH-DSA, a NIST signature standard |
+| 2024-11-12 | [NIST IR 8547](https://csrc.nist.gov/pubs/ir/8547/ipd) initial public draft | Proposes deprecating 112-bit quantum-vulnerable public-key algorithms after 2030 and disallowing all of them, including EdDSA, after 2035. Still a draft. |
+| 2025-03-11 | [NIST IR 8545](https://csrc.nist.gov/pubs/ir/8545/final) final | HQC selected as the second PQC KEM; no signature impact |
+| 2026-04-13 | [SP 800-230](https://csrc.nist.gov/pubs/sp/800/230/ipd) initial public draft | Six extra SLH-DSA `-24` sets for firmware, software, and certificates: at most 2^24 signatures per key, with roughly half-size signatures. Comments closed 2026-06-12; not final. |
+| 2026-05-14 | [NIST IR 8610](https://csrc.nist.gov/pubs/ir/8610/final) final / [Round 3](https://csrc.nist.gov/projects/pqc-dig-sig/round-3-additional-signatures) | Nine additional signature candidates advanced; HAWK withdrew in October 2026, leaving eight. Evaluation is expected to take about two years. |
+| 2026-06-22 | [Executive Order 14412](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks) | Federal HVAs and high-impact systems (excluding NSS): PQC key establishment by 2030-12-31, PQC signatures by 2031-12-31 |
+| 2026-06-24 | [OMB M-26-15](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf) | Implements EO 14412; agency migration plans due around 2026-10-22, full migration by 2035 |
+
+NIST IR 8547 has **not** been finalized as of October 2026; the 2030/2035
+dates are proposed, not yet binding. FN-DSA (Falcon, FIPS 206) is still in
+development, and HQC's standard is expected around 2027.
+
+### The fine print
+
+- **Hybrids are transitional.** IR 8547 permits PQ/classical hybrids during the
+  transition but does not settle whether the classical half may remain after
+  2035.
+- **CNSA 2.0 takes a different path.** NSA's suite (updated May 2025)
+  [explicitly excludes SLH-DSA](https://media.defense.gov/2022/Sep/07/2003071836/-1/-1/0/CSI_CNSA_2.0__FAQ_v2.2.PDF)
+  for National Security Systems and approves ML-DSA-87 plus LMS/XMSS for
+  signatures. Software and firmware signing must exclusively use CNSA 2.0 by
+  2030.
+- **The additional-signature process is not a SPHINCS+ replacement.** Round 3
+  candidates (FAEST, MAYO, MQOM, QR-UOV, SDitH, SNOVA, SQIsign, UOV) explore
+  other tradeoffs; FIPS 205 remains the hash-based standard.
+
+### What this means for signify
+
+- **No change today.** Ed25519 remains correct for the wire formats implemented
+  here.
+- **Plan for long-lived signatures.** If signatures must outlive the 2030–2035
+  window, design a PQ or hybrid envelope in the calling application.
+- **No stdlib-only SPHINCS+ yet.** Go 1.27 ships [`crypto/mlkem`](https://pkg.go.dev/crypto/mlkem)
+  (FIPS 203) and [`crypto/mldsa`](https://pkg.go.dev/crypto/mldsa) (FIPS 204),
+  but there is no `crypto/slhdsa`. Adding SLH-DSA here would require a
+  third-party module, which would break the zero-dependency invariant. This
+  project tracks the standard instead of pretending to implement it.
+
+### Primary sources
+
+- [FIPS 205: Stateless Hash-Based Digital Signature Standard](https://csrc.nist.gov/pubs/fips/205/final) ([PDF](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.205.pdf))
+- [FIPS 203: ML-KEM](https://csrc.nist.gov/pubs/fips/203/final) and [FIPS 204: ML-DSA](https://csrc.nist.gov/pubs/fips/204/final)
+- [NIST IR 8547: Transition to Post-Quantum Cryptography Standards (draft)](https://csrc.nist.gov/pubs/ir/8547/ipd)
+- [NIST SP 800-230: Additional SLH-DSA Parameter Sets (draft)](https://csrc.nist.gov/pubs/sp/800/230/ipd)
+- [NIST IR 8610: Additional Digital Signature Schemes, Round 2 report](https://csrc.nist.gov/pubs/ir/8610/final)
+- [NIST IR 8545: HQC fourth-round selection report](https://csrc.nist.gov/pubs/ir/8545/final)
+- [Executive Order 14412 (Federal Register)](https://www.federalregister.gov/documents/2026/06/25/2026-12909/securing-the-nation-against-advanced-cryptographic-attacks)
+- [OMB M-26-15: Execution of the Migration to Post-Quantum Cryptography](https://www.whitehouse.gov/wp-content/uploads/2026/06/M-26-15-Execution-of-the-Migration-to-Post-Quantum-Cryptography.pdf)
+- [NSA CNSA 2.0 algorithms](https://media.defense.gov/2025/May/30/2003728741/-1/-1/0/CSA_CNSA_2.0_ALGORITHMS.PDF) and [FAQ v2.2](https://media.defense.gov/2022/Sep/07/2003071836/-1/-1/0/CSI_CNSA_2.0__FAQ_v2.2.PDF)
+- [NIST FIPS 206 / FN-DSA presentation](https://csrc.nist.gov/presentations/2025/fips-206-fn-dsa-falcon)
+
 ## 🧪 Development
 
 ```shell
@@ -333,8 +420,8 @@ Do not run it casually.
 - Hero artwork: [dark](docs/hero-dark.svg) / [light](docs/hero-light.svg) —
   dependency-free SVG, theme-aware `<picture>`
 - Established banner: [dark](docs/established-dark.svg) /
-  [light](docs/established-light.svg) — 2022 to today, 31+ tagged releases
-  (theme-aware `<picture>`)
+  [light](docs/established-light.svg) — 2022 to today, 34+ tagged releases,
+  release-per-year chart (theme-aware `<picture>`)
 - Screenshots: [quickstart](docs/screenshot-demo.svg) /
   [test suite](docs/screenshot-tests.svg) — rendered from real captured ANSI
   output with [docs/render_ansi_svg.py](docs/render_ansi_svg.py)
