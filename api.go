@@ -250,7 +250,7 @@ func (msg *Message) Verify(pub PublicKey) (bool, error) {
 			return false, errors.New("verify failed: no raw message and " + err.Error())
 		}
 	}
-	if msg.Signature.Base64 != _empty {
+	if msg.Signature.Base64 != _empty && msg.Signature.Raw.RawSig == ([SignatureSize]byte{}) {
 		if err := msg.Signature.Decode(); err != nil {
 			return false, errors.New("verify failed: " + err.Error())
 		}

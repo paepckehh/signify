@@ -197,3 +197,27 @@ func TestReSignResetsSignature(t *testing.T) {
 		t.Fatalf("re-signed message does not verify: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestVerifyPrefersRawSignatureOverStaleBase64(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x11, 0x12))
+	pub := pk.GetPublicKey()
+
+	msgA := &Message{Raw: []byte("message A")}
+	if err := msgA.Sign(pk); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	msgB := &Message{Raw: []byte("message B")}
+	if err := msgB.Sign(pk); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	// Live Raw signature for A, stale wire form for B: Raw must win,
+	// the wire form is only decoded when Raw is empty.
+	hybrid := &Message{Raw: []byte("message A")}
+	hybrid.Signature.Raw = msgA.Signature.Raw
+	hybrid.Signature.Base64 = msgB.Signature.Base64
+
+	if ok, err := hybrid.Verify(pub); !ok || err != nil {
+		t.Fatalf("verify used the stale base64 signature instead of raw: ok=%v err=%v", ok, err)
+	}
+}
