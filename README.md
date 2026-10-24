@@ -12,7 +12,7 @@
 
 Create and verify OpenBSD [signify](https://man.openbsd.org/signify) /
 [minisign](https://jedisct1.github.io/minisign/) compatible Ed25519 signatures
-from pure Go, with private key handling left exactly where it belongs: in
+from pure Go, while private key handling stays exactly where it belongs: in
 *your* application.
 
 [![Go Reference](https://pkg.go.dev/badge/paepcke.de/signify.svg)](https://pkg.go.dev/paepcke.de/signify)
@@ -25,6 +25,12 @@ from pure Go, with private key handling left exactly where it belongs: in
 ```shell
 go get paepcke.de/signify
 ```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/established-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/established-light.svg">
+  <img src="docs/established-light.svg" alt="signify: established in 2022, 4+ years of continuous development on GitHub, 31+ tagged releases" width="100%">
+</picture>
 
 </div>
 
@@ -40,10 +46,12 @@ already owns its key lifecycle.
 and deliberately stops there. You decide how the seed becomes a key, where it
 lives, and how it is unlocked.
 
+**No passphrase prompts. No key files written. No hidden state.** Just the
+primitives, in one tiny package.
+
 - 🪶 **100% pure Go, stdlib only** — no external modules, no `go.sum`, no CGO
-- 🔐 **Hardware-friendly by design** — no built-in password KDF, no secret
-  copying outside your control
-- 📦 **Tiny, flat API** — nine types (four high-level, three raw wire structs,
+- 🔐 **Secrets stay yours** — no built-in KDF, no prompts, no file or network I/O
+- 🧩 **Tiny, flat API** — nine types (four high-level, three raw wire structs,
   two array aliases) and a handful of methods, all in [`api.go`](api.go)
 - 🔁 **Dual representation** — every key, signature, and message has a `Raw`
   binary form and a base64 wire form
@@ -53,10 +61,13 @@ lives, and how it is unlocked.
   via `GeneratePKFromSeed`
 - ✅ **Signed, then self-verified** — every `Sign` verifies its own output before
   returning
-- 🛡 **Explicit errors** — wrong sizes, unknown algorithms, and missing keys are
-  never ignored
+- 🛡 **Strict by default** — wrong sizes, unknown algorithms, missing keys, and
+  fingerprint mismatches are errors, never silent rejections
+- 📦 **Library-first** — no CLI, no globals, no `init()` magic
 
 ## 🚀 Install
+
+**Go** (any platform with a Go toolchain):
 
 ```shell
 go get paepcke.de/signify
@@ -64,9 +75,15 @@ go get paepcke.de/signify
 
 Requires Go 1.27.2 or newer (`go.mod` declares `go 1.27.2`).
 
-## 🎬 Quickstart
+**Browse the API locally:**
 
-### Generate, sign, verify
+```shell
+go doc paepcke.de/signify
+```
+
+## 🎬 Showtime
+
+The whole loop: seed in, key out, sign, verify.
 
 ```go
 package main
@@ -79,8 +96,7 @@ import (
 )
 
 func main() {
-	// A seed token is 32 bytes of seed + 8 bytes of fingerprint.
-	// In production the seed comes from your KMS, HSM, or secure RNG.
+	// 32 bytes of seed + 8 bytes of fingerprint, e.g. from your KMS or HSM.
 	var token [signify.SeedTokenSize]byte
 	copy(token[:], "0123456789abcdef0123456789abcdef")
 	copy(token[signify.SeedSize:], "demo-key")
@@ -92,15 +108,29 @@ func main() {
 	if err := msg.Sign(pk); err != nil {
 		log.Fatal(err)
 	}
-
 	ok, err := msg.Verify(pub)
 	if err != nil || !ok {
 		log.Fatalf("verification failed: ok=%v err=%v", ok, err)
 	}
 
-	fmt.Println(msg.Signature.Base64)
+	if err := pub.Encode(); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("public key:", pub.Base64)
+	fmt.Println("signature :", msg.Signature.Base64)
+	fmt.Println("verified  :", ok)
 }
 ```
+
+```text
+public key: RWRkZW1vLWtleSO8VJEsHm6SxKhoJchn4n/9xVW/+9QkTxeiar//7pZd
+signature : RWRkZW1vLWtleTQtIzJIg4IKpcWbsokOMHPCSiO7IsHKfhNnKZoJANIFTZme16u30UUYk+43h8BMRGsYN/lqTGcm7yeTuZTs1AU=
+verified  : true
+```
+
+The key ID is literally `demo-key` here because it was copied from the seed
+token into the fingerprint field. In production, use a random or KMS-managed
+fingerprint.
 
 ### Verify data you already have
 
@@ -205,9 +235,9 @@ private key: "Ed" | fingerprint[8] | ed25519 private key[64]  = 74 bytes
 signature  : "Ed" | fingerprint[8] | ed25519 signature[64]    = 74 bytes
 ```
 
-All integers are big-endian (`encoding/binary`), and the textual form is
-standard base64 (`base64.StdEncoding`). Decoders reject any blob whose length
-does not match the exact wire size for its type.
+All multi-byte fields are written big-endian (`encoding/binary`), and the
+textual form is standard base64 (`base64.StdEncoding`). Decoders reject any blob
+whose length does not match the exact wire size for its type.
 
 Files use the OpenBSD convention, every line `\n`-terminated:
 
@@ -245,13 +275,12 @@ Report vulnerabilities to `alert.git (/AT/) paepcke.de` — see
 
 ## 🤝 Compatibility
 
-- ✅ OpenBSD `signify` Ed25519 public keys, signatures, and `untrusted comment:`
-  file framing
-- ✅ `minisign` Ed25519 public key and signature wire layout (`"Ed"` tag plus
-  8-byte key ID)
-- ❌ `minisign` prehashed signatures, trusted comments, and global signatures —
-  not implemented
-- ❌ bcrypt/pbkdf-encrypted private keys — *intentionally out of scope*
+| Surface | Status |
+| :--- | :--- |
+| OpenBSD `signify` Ed25519 public keys, signatures, and `untrusted comment:` framing | ✅ supported |
+| `minisign` Ed25519 public key and signature wire layout (`"Ed"` tag + 8-byte key ID) | ✅ supported |
+| `minisign` prehashed signatures, trusted comments, global signatures | ❌ not implemented |
+| bcrypt/pbkdf-encrypted private keys | ❌ intentionally out of scope |
 
 The last point is the reason this fork exists. If you need the standard
 passphrase-protected private key format, use OpenBSD `signify` directly.
@@ -271,13 +300,13 @@ gofmt -w -s .
 go build ./...
 go vet ./...
 go test ./...
+go test -cover ./...
 ```
 
 The test suite is stdlib-only and table-driven where it helps, covering
 deterministic key generation, constructor defaults, sign/verify round trips,
 base64 wire forms, a pinned wire-format vector, file framing and comment
 handling, re-signing, malformed input, tamper rejection, and invalid sizes.
-Coverage is reported with `go test -cover ./...`.
 
 `make deps` is destructive: it deletes `go.mod` and re-initializes the module.
 Do not run it casually.
@@ -289,6 +318,9 @@ Do not run it casually.
 - Releases: [github.com/paepckehh/signify/releases](https://github.com/paepckehh/signify/releases)
 - Hero artwork: [dark](docs/hero-dark.svg) / [light](docs/hero-light.svg) —
   dependency-free SVG, theme-aware `<picture>`
+- Established banner: [dark](docs/established-dark.svg) /
+  [light](docs/established-light.svg) — 2022 to today, 31+ tagged releases
+  (theme-aware `<picture>`)
 - History: a minimal fork of [`github.com/ebfe/signify`](https://github.com/ebfe/signify)
 
 ## 🤝 Contributing

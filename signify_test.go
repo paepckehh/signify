@@ -464,3 +464,113 @@ func TestVerifyRejectsMalformedInput(t *testing.T) {
 		t.Fatal("verify accepted a signature with an unknown algo tag")
 	}
 }
+
+func TestSignVerifyEmptyPayload(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x1d, 0x1e))
+	msg := &Message{Raw: []byte{}}
+	if err := msg.Sign(pk); err != nil {
+		t.Fatalf("sign empty payload: %v", err)
+	}
+	if ok, err := msg.Verify(pk.GetPublicKey()); !ok || err != nil {
+		t.Fatalf("verify empty payload: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestSignRejectsMissingMessage(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x1f, 0x20))
+	if err := (&Message{}).Sign(pk); err == nil {
+		t.Fatal("sign accepted a message without a raw or base64 payload")
+	}
+}
+
+func TestGetSigFileFromBase64Message(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x21, 0x22))
+	pub := pk.GetPublicKey()
+	msg := &Message{Base64: base64.StdEncoding.EncodeToString([]byte("base64 payload"))}
+	data, err := msg.GetSigFile(pk)
+	if err != nil {
+		t.Fatalf("get signature file: %v", err)
+	}
+	if !bytes.Equal(msg.Raw, []byte("base64 payload")) {
+		t.Fatal("signature file did not decode the base64 message")
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), _linefeed), _linefeed)
+	if len(lines) != 2 {
+		t.Fatalf("signature file must have two lines, got %d", len(lines))
+	}
+	loaded := &Message{Raw: []byte("base64 payload"), Signature: Signature{Base64: lines[1]}}
+	if ok, err := loaded.Verify(pub); !ok || err != nil {
+		t.Fatalf("signature file does not verify: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestPublicKeyFilePrefersRawOverStaleBase64(t *testing.T) {
+	keyA := GeneratePKFromSeed(testSeedToken(0x23, 0x24)).GetPublicKey()
+	keyB := GeneratePKFromSeed(testSeedToken(0x25, 0x26)).GetPublicKey()
+	if err := keyA.Encode(); err != nil {
+		t.Fatalf("encode key A: %v", err)
+	}
+	if err := keyB.Encode(); err != nil {
+		t.Fatalf("encode key B: %v", err)
+	}
+
+	hybrid := keyA
+	hybrid.Base64 = keyB.Base64
+	data, err := hybrid.GetPubKeyFile("raw wins")
+	if err != nil {
+		t.Fatalf("get public key file: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, keyA.Base64) {
+		t.Fatal("public key file did not re-encode the raw key")
+	}
+	if strings.Contains(text, keyB.Base64) {
+		t.Fatal("public key file leaked the stale base64 key")
+	}
+}
+
+func TestGetPubKeyFileFromBase64OnlyPrivateKey(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x27, 0x28))
+	want, err := pk.GetPubKeyFile("base64 only")
+	if err != nil {
+		t.Fatalf("raw private key file: %v", err)
+	}
+	if err := pk.Encode(); err != nil {
+		t.Fatalf("encode private key: %v", err)
+	}
+	got, err := (PrivateKey{Base64: pk.Base64}).GetPubKeyFile("base64 only")
+	if err != nil {
+		t.Fatalf("base64 private key file: %v", err)
+	}
+	if !bytes.Equal(want, got) {
+		t.Fatal("base64-only private key produced a different public key file")
+	}
+}
+
+func TestVerifyRejectsTamperedSignature(t *testing.T) {
+	pk := GeneratePKFromSeed(testSeedToken(0x29, 0x2a))
+	signed := &Message{Raw: []byte("payload")}
+	if err := signed.Sign(pk); err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	tampered := &Message{Raw: signed.Raw, Signature: signed.Signature}
+	tampered.Signature.Raw.RawSig[0] ^= 0xff
+	if ok, err := tampered.Verify(pk.GetPublicKey()); ok || err == nil {
+		t.Fatal("verify accepted a tampered signature")
+	}
+}
+
+func TestDecodeRejectsNonBase64(t *testing.T) {
+	if err := (&PublicKey{Base64: "!!!!"}).Decode(); err == nil {
+		t.Fatal("public key decode accepted non-base64 input")
+	}
+	if err := (&PrivateKey{Base64: "!!!!"}).Decode(); err == nil {
+		t.Fatal("private key decode accepted non-base64 input")
+	}
+	if err := (&Signature{Base64: "!!!!"}).Decode(); err == nil {
+		t.Fatal("signature decode accepted non-base64 input")
+	}
+	if err := (&Message{Base64: "!!!!"}).Decode(); err == nil {
+		t.Fatal("message decode accepted non-base64 input")
+	}
+}

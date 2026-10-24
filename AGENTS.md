@@ -19,7 +19,7 @@ Flat, single package at the repo root — no `cmd/`, no `internal/`, no subpacka
 - `api.go` — the entire public API: size constants, `Signature`, `PublicKey`, `PrivateKey`, `Message` types and their methods (`Sign`, `Verify`, `Encode`, `Decode`, `GetPubKeyFile`, `GetSigFile`, `GeneratePKFromSeed`, `GetPublicKey`).
 - `generic.go` — unexported helpers: base64 `enc`/`dec`, wire `encodeRaw`/`decodeRaw`, the `_algoEd25519` tag, and string constants for file framing.
 - `signify_test.go` — stdlib-only tests: deterministic key generation, constructor defaults, sign/verify round trips, base64 wire forms, a pinned wire-format vector, file framing, malformed input.
-- `docs/` — dependency-free, theme-aware hero SVGs (`hero-light.svg`, `hero-dark.svg`) used by the README `<picture>` block.
+- `docs/` — dependency-free, theme-aware hero SVGs (`hero-light.svg`, `hero-dark.svg`) and established banners (`established-light.svg`, `established-dark.svg`) used by the README `<picture>` blocks.
 - `.attic/` — archived historical code, not part of the build.
 - `.github/workflows/` — `golang.yml` (build/vet/test), `codeql.yml` (CodeQL).
 
@@ -69,7 +69,7 @@ Key flows:
 
 ## Testing
 
-`signify_test.go` contains stdlib-only tests (no framework, no fixtures) covering deterministic key generation, constructor defaults, sign/verify round trips, base64 wire forms, a pinned wire-format vector, file framing and comment normalization, re-signing, malformed input, and rejection of empty/invalid inputs. Keep new tests in the same package and dependency-free. Run `go test -cover ./...` to check coverage (currently above 92%).
+`signify_test.go` contains stdlib-only tests (no framework, no fixtures) covering deterministic key generation, constructor defaults, sign/verify round trips (including empty payloads and base64 messages), base64 wire forms, a pinned wire-format vector, file framing and comment normalization, stale-wire precedence, re-signing, tampered signatures, malformed input, and rejection of empty/invalid inputs. Keep new tests in the same package and dependency-free. Run `go test -cover ./...` to check coverage (currently above 94%).
 
 ## Release process
 
